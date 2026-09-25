@@ -1,0 +1,99 @@
+# XcodeGen makes the Xcode project from this file (so no huge .xcodeproj in git).
+name: UOR-RC
+options:
+  bundleIdPrefix: iq.uor.rc
+  # keep the project readable by Xcode 15 as well (GitHub's Mac runners)
+  xcodeVersion: "15.0"
+  deploymentTarget:
+    macOS: "13.0"
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+targets:
+  UOR-RC-Mac:
+    type: application
+    platform: macOS
+    sources: [Mac, Shared]
+    info:
+      path: Mac/Info.plist
+      properties:
+        CFBundleName: UOR-RC
+        CFBundleDisplayName: UOR-RC
+        LSApplicationCategoryType: public.app-category.education
+        NSHumanReadableCopyright: University of Raparin — English Department
+        NSAppleEventsUsageDescription: UOR-RC needs permission to control PowerPoint or Keynote for your slides.
+        CFBundleIconFile: AppIcon
+        NSLocalNetworkUsageDescription: UOR-RC talks to your phone over the local Wi-Fi.
+    scheme:
+      configVariants: []
+    settings:
+      base:
+        PRODUCT_NAME: UOR-RC
+        PRODUCT_BUNDLE_IDENTIFIER: iq.uor.rc.mac
+        MARKETING_VERSION: "1.0"
+        ENABLE_HARDENED_RUNTIME: NO          # AppleScript + mouse control need this off
+        CODE_SIGN_IDENTITY: "-"
+        SWIFT_VERSION: "5.9"
+
+  UOR-RC-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - path: iOS
+        excludes: [Broadcast]
+      - Shared
+    dependencies:
+      - target: UOR-RC-Broadcast
+        embed: true
+        codeSign: true
+    entitlements:
+      path: iOS/UORRC.entitlements
+      properties:
+        com.apple.security.application-groups: [group.iq.uor.rc]
+    info:
+      path: iOS/Info.plist
+      properties:
+        CFBundleName: UOR-RC
+        CFBundleDisplayName: UOR-RC
+        UILaunchScreen: {}
+        UIRequiresFullScreen: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        NSLocalNetworkUsageDescription: UOR-RC connects to the computer running UOR-RC on your Wi-Fi.
+        NSBonjourServices: [_uorrc._tcp]
+        NSCameraUsageDescription: The document camera shows what your phone's camera sees on the projector.
+        NSMicrophoneUsageDescription: The 🎤 button sends your voice to the computer's speakers.
+        NSPhotoLibraryUsageDescription: To show your photos and videos full-screen on the projector.
+    scheme:
+      configVariants: []
+    settings:
+      base:
+        PRODUCT_NAME: UOR-RC
+        PRODUCT_BUNDLE_IDENTIFIER: iq.uor.rc.remote
+        MARKETING_VERSION: "1.0"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: YES
+        SWIFT_VERSION: "5.9"
+
+  UOR-RC-Broadcast:
+    type: app-extension
+    platform: iOS
+    sources: [iOS/Broadcast, Shared]
+    info:
+      path: iOS/Broadcast/Info.plist
+      properties:
+        CFBundleDisplayName: UOR-RC screen
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    entitlements:
+      path: iOS/Broadcast/Broadcast.entitlements
+      properties:
+        com.apple.security.application-groups: [group.iq.uor.rc]
+    settings:
+      base:
+        PRODUCT_NAME: UOR-RC screen
+        PRODUCT_BUNDLE_IDENTIFIER: iq.uor.rc.remote.broadcast
+        MARKETING_VERSION: "1.0"
+        SWIFT_VERSION: "5.9"
