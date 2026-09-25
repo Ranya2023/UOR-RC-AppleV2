@@ -115,7 +115,7 @@ final class Transfer {
         acks[id] = sem
         defer { acks[id] = nil }
         log("Sending to phone: \(name)")
-        send(["e": "fs", "t": "start", "id": id, "name": name, "size": size ?? 0])
+        send(["e": "fs", "t": "start", "id": id, "name": name, "size": size])
         guard sem.wait(timeout: .now() + 15) == .success, let file = try? FileHandle(forReadingFrom: url) else {
             log("The phone did not accept \(name)."); return
         }
@@ -129,7 +129,7 @@ final class Transfer {
             send(["e": "fs", "t": "chunk", "id": id, "seq": seq, "d": chunk.base64EncodedString()])
             seq += 1
             sent += chunk.count
-            if let s = size, s > 0 { onProgress?(name, sent * 100 / s, true) }
+            if size > 0 { onProgress?(name, sent * 100 / size, true) }
         }
         try? file.close()
         send(["e": "fs", "t": "end", "id": id])
