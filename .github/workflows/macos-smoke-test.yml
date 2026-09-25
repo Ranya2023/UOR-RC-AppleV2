@@ -1,0 +1,70 @@
+name: macOS App Smoke Test
+
+on:
+  workflow_dispatch:        # lets you trigger it manually from the Actions tab
+  push:
+    branches: [ main ]
+    paths:
+      - 'Mac/**'
+      - 'Shared/**'
+      - 'UOR-RC.xcodeproj/**'
+
+jobs:
+  build-and-smoke-test:
+    runs-on: macos-14       # Apple Silicon runner; the app is a universal binary so this is fine
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Build UOR-RC-Mac
+        run: |
+          xcodebuild -project UOR-RC.xcodeproj -scheme UOR-RC-Mac \
+            -configuration Release -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build
+
+      - name: Locate the built app
+        run: |
+          APP_PATH=$(find build/Build/Products/Release -maxdepth 1 -name "*.app")
+          if [ -z "$APP_PATH" ]; then
+            echo "::error::No .app bundle found in build output"
+            exit 1
+          fi
+          echo "APP_PATH=$APP_PATH" >> "$GITHUB_ENV"
+          echo "Found app at: $APP_PATH"
+
+      - name: Remove quarantine flag
+        run: xattr -cr "$APP_PATH"
+
+      - name: Verify code signature
+        run: |
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH" \
+            || echo "::warning::Signature check failed, continuing anyway (build is unsigned by design)"
+
+      - name: Launch app and confirm it stays running
+        run: |
+          open "$APP_PATH"
+          sleep 5
+          if pgrep -f "UOR-RC" > /dev/null; then
+            echo "App is still running after 5 seconds — good sign"
+          else
+            echo "::error::App exited or crashed immediately after launch"
+            exit 1
+          fi
+
+      - name: Quit the app
+        if: always()
+        run: pkill -f "UOR-RC" || true
+
+      - name: Collect crash logs on failure
+        if: failure()
+        run: |
+          mkdir -p crash-logs
+          cp -r ~/Library/Logs/DiagnosticReports/*UOR-RC* crash-logs/ 2>/dev/null || echo "No crash logs found"
+
+      - name: Upload crash logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crash-logs
+          path: crash-logs
