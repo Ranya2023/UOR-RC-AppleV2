@@ -1,0 +1,72 @@
+name: Build UOR-RC for Mac & iPhone
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apple:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on this runner
+        run: |
+          ls /Applications | grep -i "^Xcode" || true
+          latest=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Using $latest"
+          sudo xcode-select -s "$latest/Contents/Developer"
+          xcodebuild -version
+
+      - name: Make the Xcode project
+        run: |
+          brew install xcodegen
+          xcodegen generate
+          xcodebuild -list -project UOR-RC.xcodeproj
+
+      # ── Mac app ─────────────────────────────────────────────────────
+      - name: Build the Mac app
+        run: |
+          xcodebuild -project UOR-RC.xcodeproj -scheme UOR-RC-Mac -configuration Release \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO build
+          cd build/Build/Products/Release
+          # sign it with an ad-hoc signature so macOS will open it (both Intel and Apple-Silicon parts)
+          codesign --force --deep --sign - "UOR-RC.app"
+          codesign -dv "UOR-RC.app" 2>&1 | head -3 || true
+          ditto -c -k --keepParent "UOR-RC.app" "$GITHUB_WORKSPACE/UOR-RC-Mac.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          path: UOR-RC-Mac.zip
+
+      # ── iPhone app (unsigned: install with Xcode, Sideloadly or TestFlight) ──
+      - name: Build the iPhone app
+        run: |
+          xcodebuild -project UOR-RC.xcodeproj -scheme UOR-RC-iOS -configuration Release \
+            -sdk iphoneos -derivedDataPath build-ios \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build
+          mkdir -p Payload
+          cp -R build-ios/Build/Products/Release-iphoneos/UOR-RC.app Payload/
+          zip -qry UOR-RC-iPhone-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: iphone
+          path: UOR-RC-iPhone-unsigned.ipa
+
+      - uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: apple-v1.0.${{ github.run_number }}
+          name: UOR-RC for Mac & iPhone v1.0.${{ github.run_number }}
+          body: |
+            🖥 **UOR-RC-Mac.zip** → unzip and drag UOR-RC.app to Applications
+            📱 **UOR-RC-iPhone-unsigned.ipa** → install with Xcode / Sideloadly, or sign it with your Apple account
+          files: |
+            UOR-RC-Mac.zip
+            UOR-RC-iPhone-unsigned.ipa
